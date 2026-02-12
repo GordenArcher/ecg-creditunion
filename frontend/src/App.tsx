@@ -1,35 +1,28 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { Outlet, Navigate, useLocation } from "react-router-dom";
+import { useAuthStore } from "./stores/useUserStore";
+import { useEffect } from "react";
+import { fetchAuditLogs } from "./api/api";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const { checkAuth, authChecking, isAuthenticated } = useAuthStore();
+  const location = useLocation();
 
-  return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+  useEffect(() => {
+    checkAuth();
+    fetchAuditLogs();
+  }, [checkAuth]);
+
+  if (authChecking) {
+    return <div>Checking authentication...</div>;
+  }
+
+  console.log(isAuthenticated);
+
+  if (!isAuthenticated && location.pathname !== "/auth/login") {
+    return <Navigate to="/auth/login" replace />;
+  }
+
+  return <Outlet />;
 }
 
-export default App
+export default App;
