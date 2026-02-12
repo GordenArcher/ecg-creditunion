@@ -46,16 +46,22 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     # "django_celery_results",
     # "django_celery_beat",
+    "drf_spectacular",
     'apps.users',
     'apps.audit',
 
 ]
+
+AUTH_USER_MODEL = "users.User"
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.common.CommonMiddleware',
+    "core.middleware.silent_refresh.SilentRefreshJwtMiddleware",
+    "core.middleware.csrf.CSRFFromCookieMiddleware.CSRFFromCookieMiddleware",
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -63,16 +69,29 @@ MIDDLEWARE = [
 ]
 
 REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "core.exceptions.custom_exception_handler",
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'core.authentication.authentication.CookieOrHeaderJWTAuthentication',
     ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 from datetime import timedelta
+
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
+}
+
+AUTH_COOKIE_SETTINGS = {
+    "HTTPONLY": True,
+    "SECURE": True,
+    "SAMESITE": "None" if not DEBUG else "Lax",
+    "PATH": "/",
+    "DOMAIN": "" if not DEBUG else None,
+    "ACCESS_TOKEN_MAX_AGE": 900,
+    "REFRESH_TOKEN_MAX_AGE": 2592000,
 }
 
 CACHES = {

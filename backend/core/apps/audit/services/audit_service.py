@@ -1,8 +1,7 @@
 from typing import Optional, Dict, Any
 from django.contrib.auth import get_user_model
-from audit.models import AuditLog
-
-User = get_user_model()
+from ..models import AuditLog
+from apps.users.models import User
 
 
 class AuditService:
@@ -24,6 +23,7 @@ class AuditService:
         action: str,
         target_type: str = "",
         target_id: str = "",
+        severity: str = AuditLog.Severity.MEDIUM,
         status: str = AuditLog.Status.SUCCESS,
         metadata: Optional[Dict[str, Any]] = None,
         before_state: Optional[Dict[str, Any]] = None,
@@ -47,6 +47,7 @@ class AuditService:
                 action="USER_LOGIN",
                 target_type="User",
                 target_id=str(user.id),
+                severity=AuditLog.Severity.MEDIUM,
                 status=AuditLog.Status.SUCCESS,
                 ip_address=request.META.get('REMOTE_ADDR'),
                 device_info=request.META.get('HTTP_USER_AGENT', ''),
@@ -59,6 +60,7 @@ class AuditService:
                 action="USER_UPDATE",
                 target_type="User",
                 target_id=str(updated_user.id),
+                severity=AuditLog.Severity.CRITICAL,  # Role change is critical
                 status=AuditLog.Status.SUCCESS,
                 before_state={"role": "user", "status": "active"},
                 after_state={"role": "admin", "status": "active"},
@@ -70,6 +72,7 @@ class AuditService:
                 action="LOGIN_FAILED",
                 target_type="User",
                 target_id="",  # We don't know which user they tried
+                severity=AuditLog.Severity.HIGH,
                 status=AuditLog.Status.FAILED,
                 ip_address=request.META.get('REMOTE_ADDR'),
                 metadata={"email_tried": email}
@@ -174,6 +177,34 @@ class AuditService:
                     ip_address=request.META.get('REMOTE_ADDR'),
                     device_info=request.META.get('HTTP_USER_AGENT', '')
                 )
+
+
+                Severity levels:
+                    - LOW: Read operations, info-level actions
+                    - MEDIUM: Create/Update operations
+                    - HIGH: Delete, permission changes, security events
+                    - CRITICAL: Authentication failures, system changes
+                    
+                    Examples:
+                        # Low severity - reading user data
+                        AuditService.log(
+                            actor=admin_user,
+                            action="USER_READ",
+                            target_type="User",
+                            target_id=str(user.id),
+                            severity=AuditLog.Severity.LOW,
+                            metadata={"read_fields": ["id", "email", "full_name"]}
+                        )
+                        
+                        # High severity - deleting user
+                        AuditService.log(
+                            actor=admin_user,
+                            action="USER_DELETE",
+                            target_type="User",
+                            target_id=str(user.id),
+                            severity=AuditLog.Severity.HIGH,
+                            metadata={"reason": "account_termination"}
+                        )
         """
         
         
@@ -183,6 +214,7 @@ class AuditService:
             action=action,
             target_type=target_type,
             target_id=str(target_id) if target_id else "",
+            severity=severity,
             status=status,
             metadata=metadata or {},
             before_state=before_state,

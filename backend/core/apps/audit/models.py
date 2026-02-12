@@ -9,6 +9,12 @@ class AuditLog(models.Model):
         SUCCESS = "SUCCESS", "Success"
         FAILED = "FAILED", "Failed"
 
+    class Severity(models.TextChoices):
+        LOW = "LOW", "Low"            
+        MEDIUM = "MEDIUM", "Medium"    
+        HIGH = "HIGH", "High"       
+        CRITICAL = "CRITICAL", "Critical" 
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -18,7 +24,11 @@ class AuditLog(models.Model):
         related_name="audit_logs",
     )
     actor_role = models.CharField(max_length=50, blank=True)
-
+    severity = models.CharField(
+        max_length=10,
+        choices=Severity.choices,
+        default=Severity.LOW,
+    )
     action = models.CharField(max_length=255)
 
     target_type = models.CharField(max_length=100, blank=True)
