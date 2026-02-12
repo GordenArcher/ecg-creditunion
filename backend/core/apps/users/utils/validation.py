@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from .permissions import PermissionHelper
 from ..models import User
-
+from datetime import datetime
 
 class UserValidationHelper:
     """Validation utilities."""
@@ -62,6 +62,15 @@ class UserValidationHelper:
             
             if 'allowed_values' in rule and value not in rule['allowed_values']:
                 errors[field] = f"{field} must be one of: {', '.join(rule['allowed_values'])}"
+
+            if field == "date_of_birth":
+                if value in ["", None]:
+                    data[field] = None
+                else:
+                    try:
+                        datetime.strptime(value, "%Y-%m-%d")
+                    except ValueError:
+                        errors[field] = "Date must be in YYYY-MM-DD format"
             
             if field == 'email' and value:
                 try:

@@ -49,7 +49,13 @@ class CustomUserManager(BaseUserManager):
 
 class Station(models.Model):
     """Station/Office location model."""
-    
+    id = models.UUIDField(
+        _("Station ID"),
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        help_text=_("Unique Station identifier")
+    )
     code = models.CharField(
         max_length=20,
         unique=True,
@@ -100,6 +106,11 @@ class Station(models.Model):
             models.Index(fields=['name']),
             models.Index(fields=['is_active']),
         ]
+
+    def save(self, *args, **kwargs):
+        if self.code:
+            self.code = self.code.upper().strip()
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return f"{self.code} - {self.name}"
@@ -107,7 +118,13 @@ class Station(models.Model):
 
 class Division(models.Model):
     """Division/Department model."""
-    
+    id = models.UUIDField(
+        _("Division ID"),
+        default=uuid.uuid4,
+        primary_key=True,
+        editable=False,
+        help_text=_("Unique division identifier")
+    )
     code = models.CharField(
         max_length=20,
         unique=True,
@@ -150,6 +167,11 @@ class Division(models.Model):
             models.Index(fields=['directorate']),
             models.Index(fields=['is_active']),
         ]
+    
+    def save(self, *args, **kwargs):
+        if self.code:
+            self.code = self.code.upper().strip()
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return f"{self.code} - {self.name}"
@@ -283,6 +305,13 @@ class User(AbstractUser):
         choices=Role.choices,
         default=Role.STAFF
     )
+
+    pb_number = models.CharField(
+        _("PB Number"),
+        max_length=50,
+        blank=True,
+        help_text=_("Personnel/Payroll number")
+    )
     
     directorate = models.CharField(
         _("Directorate"),
@@ -317,6 +346,7 @@ class User(AbstractUser):
         blank=True,
         help_text=_("User's profile picture/avatar")
     )
+    password_last_changed = models.DateTimeField(null=True, blank=True)
     
     created_by = models.ForeignKey(
         'self',

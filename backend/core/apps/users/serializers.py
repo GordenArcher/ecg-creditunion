@@ -52,6 +52,7 @@ class UserSerializer(serializers.ModelSerializer):
             'role',
             'directorate',
             'date_registered',
+            "pb_number",
             'discontinued',
             'discontinued_date',
             'avatar',

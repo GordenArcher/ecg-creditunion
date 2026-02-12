@@ -20,6 +20,7 @@ from apps.audit.models import AuditLog
 from django.db import transaction
 from ..helper.tokens import get_tokens_for_user
 from ..helper.cookie.set_cookies import set_auth_cookies
+from ..helper.cookie.delete_auth_cookies import delete_auth_cookies
 from ..models import User, Station, Division, UserAccountMeta
 from ..utils.user_cache import UserCacheManager
 from rest_framework.pagination import PageNumberPagination
@@ -193,7 +194,7 @@ def login_user(request):
         logger.error(f"Login error for email {email}: {str(e)}", exc_info=True)
         return error_response(
             message="An unexpected error occurred during login.",
-            errors=str(e) if settings.DEBUG else None,
+            errors=str(e) if settings.DEBUG else {"detail": "An unexpected error occurred."},
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             code="INTERNAL_SERVER_ERROR",
             request_id=request_id,
@@ -215,7 +216,6 @@ def logout_user(request):
 
     refresh_token = request.COOKIES.get("tkn.sidcc")
 
-    
     try:
 
         if refresh_token:
@@ -224,12 +224,13 @@ def logout_user(request):
                 token = RefreshToken(refresh_token)
                 token.blacklist()
             except (TokenError, AttributeError) as e:
-                # Token might already be invalid or blacklist not configured
+                
                 logger.debug(f"Token blacklist error: {str(e)}")
         
         
         response = success_response(
             message="Logged out successfully.",
+            data={"is_authenticated": False},
             status_code=status.HTTP_200_OK,
             code="LOGOUT_SUCCESSFUL",
             request_id=request_id,
@@ -246,13 +247,15 @@ def logout_user(request):
             metadata={"logout_method": "manual"}
         )
         
-        return response
+        return delete_auth_cookies(response)
+        
+        return 
         
     except Exception as e:
         logger.error(f"Logout error: {str(e)}", exc_info=True)
         return error_response(
             message="An error occurred during logout.",
-            errors=str(e) if settings.DEBUG else None,
+            errors=str(e) if settings.DEBUG else {"detail": "An unexpected error occurred."},
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             code="INTERNAL_SERVER_ERROR",
             request_id=request_id,
@@ -359,7 +362,7 @@ def refresh_token(request):
         logger.error(f"Token refresh error: {str(e)}", exc_info=True)
         return error_response(
             message="An error occurred while refreshing token.",
-            errors=str(e) if settings.DEBUG else None,
+            errors=str(e) if settings.DEBUG else {"detail": "An unexpected error occurred."},
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             code="INTERNAL_SERVER_ERROR",
             request_id=request_id,
@@ -393,7 +396,7 @@ def check_auth(request):
         logger.error(f"Auth check error: {str(e)}", exc_info=True)
         return error_response(
             message="Authentication check failed.",
-            errors=str(e) if settings.DEBUG else None,
+            errors=str(e) if settings.DEBUG else {"detail": "An unexpected error occurred."},
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             code="INTERNAL_SERVER_ERROR",
             request_id=request_id,
@@ -492,7 +495,7 @@ def import_users_excel(request):
                 "rows_skipped": total_skipped,
                 "stations_created": len(result.get('summary', {}).get('stations_created', [])),
                 "divisions_created": len(result.get('summary', {}).get('divisions_created', [])),
-                "imported_by": request.user.email,
+                "imported_by": request.user.staff_id,
                 "success_rate": result.get('summary', {}).get('success_rate', '0%'),
             }
         )
@@ -540,7 +543,7 @@ def import_users_excel(request):
             request_id=request_id,
             meta={
                 "filename": excel_file.name,
-                "imported_by": request.user.email,
+                "imported_by": request.user.staff_id,
                 "timestamp": timezone.now().isoformat(),
                 "successful": total_successful,
                 "failed": total_failed,
@@ -570,13 +573,13 @@ def import_users_excel(request):
             metadata={
                 "filename": excel_file.name,
                 "error": str(e),
-                "imported_by": request.user.email,
+                "imported_by": request.user.staff_id,
             }
         )
         
         return error_response(
             message="An error occurred while importing users.",
-            errors=str(e) if settings.DEBUG else None,
+            errors=str(e) if settings.DEBUG else {"detail": "An unexpected error occurred."},
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             code="IMPORT_ERROR",
             request_id=request_id,
@@ -835,7 +838,7 @@ def create_staff_manual(request):
         
         return error_response(
             message="An error occurred while creating staff user.",
-            errors=str(e) if settings.DEBUG else None,
+            errors=str(e) if settings.DEBUG else {"detail": "An unexpected error occurred."},
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             code="INTERNAL_SERVER_ERROR",
             request_id=request_id,
@@ -1028,7 +1031,7 @@ def create_staff_manual(request):
         
 #         return error_response(
 #             message="An error occurred while creating admin user.",
-#             errors=str(e) if settings.DEBUG else None,
+#             errors=str(e) if settings.DEBUG else {"detail": "An unexpected error occurred."},
 #             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
 #             code="INTERNAL_SERVER_ERROR",
 #             request_id=request_id,
@@ -1038,56 +1041,289 @@ def create_staff_manual(request):
 
 
 
-def custom_paginate(request, queryset, serializer_class):
-    paginator = PageNumberPagination()
-    paginator.page_size = 10  
-    paginator.page_size_query_param = 'page_size'
-    page = paginator.paginate_queryset(queryset, request)
-    serializer = serializer_class(page, many=True)
+class CustomPageNumberPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
 
-    return success_response(
-        data={
-            "count": queryset.count(),
-            "page": paginator.page.number if paginator.page else 1,
-            "page_size": paginator.page.paginator.per_page if paginator.page else len(serializer.data),
-            "total_pages": paginator.page.paginator.num_pages if paginator.page else 1,
-            "results": serializer.data,
-        },
-        status_code=status.HTTP_200_OK
-    )
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def station_list(request):
-    """Get paginated list of stations with search."""
-    queryset = Station.objects.filter(is_active=True).order_by('code')
-
-    search = request.query_params.get('search')
-    if search:
-        queryset = queryset.filter(
-            Q(code__icontains=search) |
-            Q(name__icontains=search) |
-            Q(location__icontains=search)
+    def get_paginated_response(self, data):
+        return success_response(
+            data={
+                "count": self.page.paginator.count,
+                "page": self.page.number if self.page else 1,
+                "page_size": self.page.paginator.per_page if self.page else len(data),
+                "total_pages": self.page.paginator.num_pages if self.page else 1,
+                "results": data,
+            },
+            status_code=200
         )
 
-    return custom_paginate(request, queryset, StationSerializer)
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from django.db.models import Q
+
+class DivisionViewSet(ModelViewSet):
+    queryset = Division.objects.order_by("code")
+    serializer_class = DivisionSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = CustomPageNumberPagination
+    lookup_field = "id"
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        search = self.request.query_params.get("search")
+        if search:
+            queryset = queryset.filter(
+                Q(code__icontains=search) |
+                Q(name__icontains=search) |
+                Q(directorate__icontains=search)
+            )
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        try:
+            data = request.data
+            required_fields = ["code", "name"]
+            for field in required_fields:
+                if not data.get(field):
+                    return error_response(
+                        message=f"{field} is required.",
+                        status_code=400,
+                        code="MISSING_FIELD"
+                    )
+
+            code = data["code"].strip()
+            if Division.objects.filter(code__iexact=code, is_active=True).exists():
+                return error_response(
+                    message=f"A division with code '{code}' already exists.",
+                    status_code=400,
+                    code="DUPLICATE_CODE"
+                )
+
+            division = Division.objects.create(
+                code=code,
+                name=data["name"].strip(),
+                description=data.get("description", "").strip(),
+                directorate=data.get("directorate"),
+                is_active=data.get("is_active", True),
+            )
+
+            UserCacheManager.invalidate_all_users()
+
+            return success_response(
+                message="Division created successfully.",
+                data=DivisionSerializer(division).data,
+                status_code=201,
+                code="DIVISION_CREATED"
+            )
+
+        except Exception as e:
+            logger.error("Error creating division", exc_info=True)
+            return error_response(
+                message="An error occurred while creating division.",
+                errors=str(e) if settings.DEBUG else None,
+                status_code=500,
+                code="INTERNAL_SERVER_ERROR"
+            )
+
+    def update(self, request, *args, **kwargs):
+        try:
+            division = self.get_object()
+            data = request.data
+            for field in ["code", "name", "description", "directorate"]:
+                if field in data:
+                    setattr(division, field, data[field])
+            if "is_active" in data:
+                division.is_active = bool(data["is_active"])
+            division.save()
+            UserCacheManager.invalidate_all_users()
+            return success_response(
+                message="Division updated successfully.",
+                data=DivisionSerializer(division).data,
+                status_code=200,
+                code="DIVISION_UPDATED"
+            )
+        except Exception as e:
+            logger.error("Error updating division", exc_info=True)
+            return error_response(
+                message="An error occurred while updating division.",
+                errors=str(e) if settings.DEBUG else None,
+                status_code=500,
+                code="INTERNAL_SERVER_ERROR"
+            )
+        
+    def destroy(self, request, *args, **kwargs):
+        """Delete a division (admin only)."""
+        try:
+            division = self.get_object()
+            division.delete()
+            UserCacheManager.invalidate_all_users()
+            return success_response(
+                message="Division deleted successfully.",
+                status_code=200,
+                code="DIVISION_DELETED"
+            )
+        except Exception as e:
+            logger.error("Error deleting division", exc_info=True)
+            return error_response(
+                message="An error occurred while deleting division.",
+                errors=str(e) if settings.DEBUG else None,
+                status_code=500,
+                code="INTERNAL_SERVER_ERROR"
+            )
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def division_list(request):
-    """Get paginated list of divisions with search."""
-    queryset = Division.objects.filter(is_active=True).order_by('code')
 
-    search = request.query_params.get('search')
-    if search:
-        queryset = queryset.filter(
-            Q(code__icontains=search) |
-            Q(name__icontains=search) |
-            Q(directorate__icontains=search)
-        )
+class StationViewSet(ModelViewSet):
+    queryset = Station.objects.order_by("code")
+    serializer_class = StationSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    pagination_class = CustomPageNumberPagination
+    lookup_field = "id"
 
-    return custom_paginate(request, queryset, DivisionSerializer)
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        search = self.request.query_params.get("search")
+        if search:
+            queryset = queryset.filter(
+                Q(code__icontains=search) |
+                Q(name__icontains=search) |
+                Q(location__icontains=search)
+            )
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        try:
+            data = request.data
+            required_fields = ["code", "name", "location"]
+            for field in required_fields:
+                if not data.get(field):
+                    return error_response(
+                        message=f"{field} is required.",
+                        status_code=400,
+                        code="MISSING_FIELD"
+                    )
+
+            code = data["code"].strip()
+
+            # Check for duplicate station code
+            if Station.objects.filter(code__iexact=code, is_active=True).exists():
+                return error_response(
+                    message=f"A station with code '{code}' already exists.",
+                    status_code=400,
+                    code="DUPLICATE_CODE"
+                )
+
+            # Normalize + validate email if provided
+            email = None
+            if data.get("email"):
+                email = data["email"].strip().lower()
+                try:
+                    validate_email(email)
+                except ValidationError:
+                    return error_response(
+                        message="Enter a valid email address.",
+                        errors={"email": "Invalid email format."},
+                        status_code=400,
+                        code="INVALID_EMAIL"
+                    )
+
+            station = Station.objects.create(
+                code=code,
+                name=data["name"].strip(),
+                location=data["location"].strip(),
+                phone=data.get("phone"),
+                email=email,
+                is_active=data.get("is_active", True),
+            )
+
+            UserCacheManager.invalidate_all_users()
+
+            return success_response(
+                message="Station created successfully.",
+                data=StationSerializer(station).data,
+                status_code=201,
+                code="STATION_CREATED"
+            )
+
+        except Exception as e:
+            logger.error("Error creating station", exc_info=True)
+            return error_response(
+                message="An error occurred while creating station.",
+                errors=str(e) if settings.DEBUG else None,
+                status_code=500,
+                code="INTERNAL_SERVER_ERROR"
+            )
+
+
+    def update(self, request, *args, **kwargs):
+        try:
+            station = self.get_object()
+            data = request.data
+
+            
+            if "email" in data and data["email"]:
+                email = data["email"].strip().lower()
+                try:
+                    validate_email(email)
+                except ValidationError:
+                    return error_response(
+                        message="Enter a valid email address.",
+                        errors={"email": "Invalid email format."},
+                        status_code=400,
+                        code="INVALID_EMAIL"
+                    )
+                data["email"] = email
+
+            for field in ["code", "name", "location", "phone", "email"]:
+                if field in data:
+                    setattr(station, field, data[field])
+
+            if "is_active" in data:
+                value = data["is_active"]
+                if isinstance(value, str):
+                    station.is_active = value.lower() in ["true", "1", "yes"]
+                else:
+                    station.is_active = bool(value)
+
+            station.save()
+            UserCacheManager.invalidate_all_users()
+
+            return success_response(
+                message="Station updated successfully.",
+                data=StationSerializer(station).data,
+                status_code=200,
+                code="STATION_UPDATED"
+            )
+
+        except Exception as e:
+            logger.error("Error updating station", exc_info=True)
+            return error_response(
+                message="An error occurred while updating station.",
+                errors=str(e) if settings.DEBUG else None,
+                status_code=500,
+                code="INTERNAL_SERVER_ERROR"
+            )
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete a station (admin only)."""
+        try:
+            station = self.get_object()
+            station.delete()
+            UserCacheManager.invalidate_all_users()
+            return success_response(
+                message="Station deleted successfully.",
+                status_code=200,
+                code="STATION_DELETED"
+            )
+        except Exception as e:
+            logger.error("Error deleting station", exc_info=True)
+            return error_response(
+                message="An error occurred while deleting station.",
+                errors=str(e) if settings.DEBUG else None,
+                status_code=500,
+                code="INTERNAL_SERVER_ERROR"
+            )
+
 
 
 @api_view(['GET'])
@@ -1112,3 +1348,61 @@ def all_divisions(request):
         data=serializer.data,
         status_code=status.HTTP_200_OK
     )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def get_single_division(request, division_id):
+    """Get single division details by ID."""
+    try:
+        division = Division.objects.get(id=division_id)
+        serializer = DivisionSerializer(division)
+        return success_response(
+            message="Division retrieved successfully.",
+            data=serializer.data,
+            status_code=status.HTTP_200_OK,
+            code="DIVISION_RETRIEVED",
+        )
+    except Division.DoesNotExist:
+        return error_response(
+            message="Division not found.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="DIVISION_NOT_FOUND",
+        )
+    except Exception as e:
+        logger.error(f"Error retrieving division: {str(e)}", exc_info=True)
+        return error_response(
+            message="An error occurred while retrieving division.",
+            errors=str(e) if settings.DEBUG else {"detail": "An unexpected error occurred."},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            code="INTERNAL_SERVER_ERROR",
+        )
+    
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def get_single_station(request, station_id):
+    """Get single station details by ID."""
+    try:
+        station = Station.objects.get(id=station_id, is_active=True)
+        serializer = StationSerializer(station)
+        return success_response(
+            message="Station retrieved successfully.",
+            data=serializer.data,
+            status_code=status.HTTP_200_OK,
+            code="STATION_RETRIEVED",
+        )
+    except Station.DoesNotExist:
+        return error_response(
+            message="Station not found.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="STATION_NOT_FOUND",
+        )
+    except Exception as e:
+        logger.error(f"Error retrieving station: {str(e)}", exc_info=True)
+        return error_response(
+            message="An error occurred while retrieving station.",
+            errors=str(e) if settings.DEBUG else {"detail": "An unexpected error occurred."},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            code="INTERNAL_SERVER_ERROR",
+        )

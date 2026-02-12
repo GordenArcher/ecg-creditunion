@@ -10,16 +10,10 @@ def delete_auth_cookies(response):
     domain = cookie_cfg.get("DOMAIN")
 
     keys = [
-        "goria.sid",
-        "goria.sidcc",
+        "tkn.sid",
+        "tkn.sidcc",
         "isLoggedIn",
-        "essential",
-        "isPremium",
         "theme",
-        "_ga",
-        "goria_analytics",
-        "perf_session",
-        "cookieConsent",
     ]
 
     for key in keys:

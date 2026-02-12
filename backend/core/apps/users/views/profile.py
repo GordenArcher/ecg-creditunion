@@ -1,9 +1,11 @@
+from django.utils import timezone
 import logging
 from django.conf import settings
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from common.responses.response import success_response, error_response
 from common.utils.generate_requestID import generate_request_id
 from ..serializers import UserSerializer
@@ -72,24 +74,25 @@ def update_own_profile(request):
     )
 
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def change_password(request):
     """Change current user's password."""
     request_id = generate_request_id()
-    
-    old_password = request.data.get("old_password")
+
+    old_password = request.data.get("current_password")
     new_password = request.data.get("new_password")
     confirm_password = request.data.get("confirm_password")
-    
+
     if not all([old_password, new_password, confirm_password]):
         return error_response(
-            message="Old password, new password and confirm password are required.",
+            message="All password fields are required.",
             status_code=status.HTTP_400_BAD_REQUEST,
             code="MISSING_FIELDS",
             request_id=request_id,
         )
-    
+
     if new_password != confirm_password:
         return error_response(
             message="New passwords do not match.",
@@ -97,15 +100,7 @@ def change_password(request):
             code="PASSWORDS_MISMATCH",
             request_id=request_id,
         )
-    
-    if len(new_password) < 8:
-        return error_response(
-            message="New password must be at least 8 characters long.",
-            status_code=status.HTTP_400_BAD_REQUEST,
-            code="PASSWORD_TOO_SHORT",
-            request_id=request_id,
-        )
-    
+
     if not request.user.check_password(old_password):
         return error_response(
             message="Old password is incorrect.",
@@ -113,23 +108,45 @@ def change_password(request):
             code="INVALID_OLD_PASSWORD",
             request_id=request_id,
         )
+
     
-    if request.user.check_password(old_password) == new_password:
+    if request.user.check_password(new_password):
         return error_response(
             message="New password must be different from the old password.",
             status_code=status.HTTP_400_BAD_REQUEST,
             code="NEW_PASSWORD_SAME_AS_OLD",
             request_id=request_id,
         )
-    
+
     try:
+        validate_password(new_password, request.user)
+    except ValidationError as e:
+        return error_response(
+            message=" ".join(e.messages),
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="WEAK_PASSWORD",
+            request_id=request_id,
+        )
+
+    try:
+        before_state = {
+            "password_set": bool(request.user.password),
+            "password_last_changed": getattr(request.user, "password_last_changed", None).isoformat() if getattr(request.user, "password_last_changed", None) else None,
+        }
+
         request.user.set_password(new_password)
+        request.user.password_last_changed = timezone.now()
         request.user.save()
-        
-        from apps.audit.services import AuditService
+
+        after_state = {
+            "password_set": True,
+            "password_last_changed": request.user.password_last_changed.isoformat(),
+        }
+
+        from apps.audit.services.audit_service import AuditService
         from apps.audit.models import AuditLog
         from common.utils.request_utils import get_client_ip
-        
+
         AuditService.log(
             actor=request.user,
             action="PASSWORD_CHANGE",
@@ -138,20 +155,26 @@ def change_password(request):
             severity=AuditLog.Severity.HIGH,
             status=AuditLog.Status.SUCCESS,
             ip_address=get_client_ip(request),
-            metadata={"changed_by": "user"}
+            metadata={
+                "changed_by": f"{request.user.full_name} ({request.user.email or request.user.staff_id})",
+                "method": "self_service",
+            },
+            before_state=before_state,
+            after_state=after_state,
         )
-        
+
         return success_response(
             message="Password changed successfully.",
             status_code=status.HTTP_200_OK,
             code="PASSWORD_CHANGED",
             request_id=request_id,
         )
-        
+
     except Exception as e:
         logger.error(f"Error changing password: {str(e)}", exc_info=True)
+
         return error_response(
-            message="An error occurred while changing password.",
+            message="An internal error occurred.",
             errors=str(e) if settings.DEBUG else None,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             code="INTERNAL_SERVER_ERROR",

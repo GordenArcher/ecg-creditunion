@@ -58,21 +58,20 @@ def list_all_users(request):
         if ordering.lstrip('-') in ['email', 'full_name', 'staff_id', 'date_joined', 'role']:
             queryset = queryset.order_by(ordering)
         
-        # Get pagination parameters
+        
         page = int(params.get('page', 1))
         page_size = min(100, max(1, int(params.get('page_size', 20))))
         
-        # Get paginated results
+        
         items, pagination_meta = UserQueryHelper.get_paginated_users(
             queryset=queryset,
             page=page,
             page_size=page_size
         )
         
-        # Serialize data
         serializer = UserSerializer(items, many=True)
         
-        # Prepare response data
+        
         response_data = {
             "items": serializer.data,
             "pagination": pagination_meta,
@@ -161,10 +160,9 @@ def get_user_details(request, user_id):
     request_id = generate_request_id()
     
     try:
-        # Try cache first
+        
         cached_user = UserCacheManager.get_user(user_id)
         if cached_user:
-            # Log read access
             AuditService.log(
                 actor=request.user,
                 action="USER_DETAIL_READ_BY_ADMIN",
@@ -184,24 +182,13 @@ def get_user_details(request, user_id):
                 request_id=request_id,
             )
         
-        # Get from database
+        
         user = User.objects.select_related('station', 'division').get(id=user_id)
         serializer = UserSerializer(user)
         
-        # Cache the user
-        UserCacheManager.cache_user(user)
         
-        # Log read access
-        AuditService.log(
-            actor=request.user,
-            action="USER_DETAIL_READ_BY_ADMIN",
-            target_type="User",
-            target_id=user_id,
-            severity=AuditLog.Severity.LOW,
-            status=AuditLog.Status.SUCCESS,
-            ip_address=get_client_ip(request),
-            metadata={"cache_hit": False}
-        )
+        UserCacheManager.cache_user(user)
+
         
         return success_response(
             message="User retrieved successfully.",
@@ -525,7 +512,7 @@ def employee_toggle_discontinue(request, employee_id):
             # Explicit value provided
             new_status = bool(request.data['discontinued'])
         else:
-            # Toggle current status
+            
             new_status = not employee.discontinued
         
         previous_status = employee.discontinued

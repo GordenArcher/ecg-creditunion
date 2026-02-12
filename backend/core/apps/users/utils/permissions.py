@@ -7,17 +7,17 @@ class PermissionHelper:
     # Field permissions by context and role
     FIELD_PERMISSIONS = {
         'self_update': {
-            'SUPER_ADMIN': {'full_name', 'phone_number', 'avatar', 'date_of_birth'},
-            'ADMIN': {'full_name', 'phone_number', 'avatar', 'date_of_birth'},
-            'STAFF': {'full_name', 'phone_number', 'avatar', 'date_of_birth'},
+            'SUPER_ADMIN': {'full_name', 'phone_number', 'role', 'station', 'division', 'title', 'date_of_birth', 'number_of_dependents', 'is_active'},
+            'ADMIN': {'full_name', 'phone_number', 'role', 'station', 'division', 'title', 'date_of_birth', 'number_of_dependents', 'is_active'},
+            'STAFF': {'full_name', 'title', 'email', 'phone_number', 'avatar', 'date_of_birth'},
         },
         'admin_update_staff': {
-            'SUPER_ADMIN': {'full_name', 'phone_number', 'role', 'station', 'division', 'is_active'},
-            'ADMIN': {'full_name', 'phone_number', 'station', 'division'},
+            'SUPER_ADMIN': {'full_name', 'phone_number', 'role', 'station', 'division', 'title', 'date_of_birth', 'number_of_dependents', 'is_active'},
+            'ADMIN': {'full_name', 'phone_number', 'role', 'station', 'division', 'title', 'date_of_birth', 'number_of_dependents', 'is_active'},
         },
         'admin_update_any': {
-            'SUPER_ADMIN': {'full_name', 'phone_number', 'role', 'station', 'division', 'is_active', 'discontinued'},
-            'ADMIN': {'full_name', 'phone_number', 'station', 'division', 'is_active'},
+            'SUPER_ADMIN': {'full_name', 'phone_number', 'role', 'station', 'division', 'title', 'date_of_birth', 'number_of_dependents', 'is_active'},
+            'ADMIN': {'full_name', 'phone_number', 'role', 'station', 'division', 'title', 'date_of_birth', 'number_of_dependents', 'is_active'},
         }
     }
     
@@ -38,6 +38,7 @@ class PermissionHelper:
                 "date_of_birth",
                 "marital_status",
                 "number_of_dependents",
+                "pb_number",
                 "directorate",
                 "is_active",
                 "discontinued",
@@ -60,6 +61,7 @@ class PermissionHelper:
                 "date_of_birth",
                 "marital_status",
                 "number_of_dependents",
+                "pb_number",
                 "directorate",
                 "is_active",
                 "discontinued",
