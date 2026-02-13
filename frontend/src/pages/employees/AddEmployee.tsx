@@ -356,7 +356,7 @@ const AddEmployee: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-white/80 mb-1">
-                  Job Title
+                  Title
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -368,7 +368,7 @@ const AddEmployee: React.FC = () => {
                     value={formData.title}
                     onChange={handleChange}
                     className="w-full pl-10 pr-4 py-2 bg-black border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-white focus:ring-2 focus:ring-white/20"
-                    placeholder="Software Engineer"
+                    placeholder="Mr., Miss..."
                   />
                 </div>
               </div>
@@ -558,10 +558,8 @@ const AddEmployee: React.FC = () => {
                   name="directorate"
                   value={formData.directorate}
                   onChange={handleChange}
-                  className="w-full px-4 py-2 bg-black/30 border border-white/10 rounded-lg text-white/60 cursor-not-allowed"
-                  placeholder="Auto-filled from division"
-                  readOnly
-                  disabled
+                  className="w-full px-4 py-2 bg-black/30 border border-white/10 rounded-lg text-white/60"
+                  placeholder="Auto-filled from division if not provided"
                 />
               </div>
             </div>

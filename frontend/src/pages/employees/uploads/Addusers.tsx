@@ -297,7 +297,7 @@ const UserExcelImport: React.FC = () => {
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: index * 0.02 }}
-                  className="bg-white/5 border border-white/10 px-3 py-2 rounded-lg text-sm text-white/80"
+                  className="bg-black border border-white/10 px-3 py-2 rounded-lg text-sm text-white/80"
                 >
                   {header}
                 </motion.div>
@@ -319,12 +319,10 @@ const UserExcelImport: React.FC = () => {
             className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
               file
                 ? "border-green-500/50 bg-green-500/5"
-                : "border-white/20 hover:border-white/40 hover:bg-white/5"
+                : "border-white/20 hover:border-white/40 hover:bg-white/5 bg-black"
             }`}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
           >
             <input
               type="file"

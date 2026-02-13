@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import login_user from "../../api/api";
 import AnimatePage from "../../components/AnimatePage";
 import { useNavigate } from "react-router-dom";
+import { useAuthStore } from "../../stores/useUserStore";
 
 interface LoginResponse {
   status: string;
@@ -27,6 +28,7 @@ interface LoginFormData {
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const { setIsAuthenticated } = useAuthStore();
   const [formData, setFormData] = useState<LoginFormData>({
     email: "",
     password: "",
@@ -60,6 +62,7 @@ const LoginPage: React.FC = () => {
         setNextSteps(response.data.meta.next_steps || []);
 
         setTimeout(() => {
+          setIsAuthenticated(response.data?.is_authenticated || true);
           navigate("/");
         }, 3000);
       }

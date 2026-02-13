@@ -11,22 +11,13 @@ import {
   RefreshCw,
   User,
   Calendar,
-  Clock,
   Globe,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  AlertTriangle,
-  Info,
   Loader2,
-  Eye,
-  MoreVertical,
   X,
 } from "lucide-react";
 import axiosClient from "../../utils/axios";
 import { useNavigate } from "react-router-dom";
 
-// Types based on actual API response
 interface Actor {
   employee_id: string;
   email: string;

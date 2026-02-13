@@ -15,8 +15,9 @@ import {
   Briefcase,
   User,
 } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { SidebarMenuItems } from "../constants/menuItems";
+import { useAuthStore } from "../stores/useUserStore";
 
 interface MenuItem {
   id: string;
@@ -31,24 +32,30 @@ interface SidebarProps {
   onToggle?: () => void;
 }
 
-const dummyUser = {
-  name: "John Mensah",
-  email: "john.mensah@ecg.com.gh",
-  staffId: "STF001",
-  avatar: null,
-  role: "Administrator",
-};
-
 const Sidebar: React.FC<SidebarProps> = ({ collapsed = false, onToggle }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [menuItems, setMenuItems] = useState<MenuItem[]>(SidebarMenuItems);
-  const [expandedItems, setExpandedItems] = useState<string[]>([]);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [isCollapsed, setIsCollapsed] = useState(collapsed);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const { fetchUserProfile, user, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
+    if (isAuthenticated) {
+      fetchUserProfile();
+    }
+  }, [isAuthenticated, fetchUserProfile]);
+
+  // Initialize from localStorage because we save items in localstorage
+  useEffect(() => {
+    setIsMounted(true);
+
     const savedOrder = localStorage.getItem("sidebar_menu_order");
+    const savedExpanded = localStorage.getItem("sidebar_expanded_items");
+
     if (savedOrder) {
       try {
         const parsedOrder = JSON.parse(savedOrder);
@@ -63,12 +70,89 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed = false, onToggle }) => {
         console.error("Failed to parse saved menu order", e);
       }
     }
+
+    if (savedExpanded) {
+      try {
+        const parsedExpanded = JSON.parse(savedExpanded);
+        setExpandedItems(new Set(parsedExpanded));
+      } catch (e) {
+        console.error("Failed to parse saved expanded items", e);
+      }
+    }
   }, []);
 
   useEffect(() => {
+    if (!isMounted) return;
     const order = menuItems.map((item) => item.id);
     localStorage.setItem("sidebar_menu_order", JSON.stringify(order));
-  }, [menuItems]);
+  }, [menuItems, isMounted]);
+
+  useEffect(() => {
+    if (!isMounted) return;
+    localStorage.setItem(
+      "sidebar_expanded_items",
+      JSON.stringify(Array.from(expandedItems)),
+    );
+  }, [expandedItems, isMounted]);
+
+  // Close sibling items when route changes
+  useEffect(() => {
+    setExpandedItems((prev) => {
+      const newSet = new Set(prev);
+      // When navigating to a child, close other siblings at that level
+      Array.from(newSet).forEach((expandedId) => {
+        // Find if this expanded item's parent has children that match current route
+        const children = findItemById(menuItems, expandedId)?.children || [];
+        const hasActiveChild = children.some((child) => isActive(child.path));
+
+        if (hasActiveChild) {
+          // Keeping this one open since it contains the active route
+          return;
+        }
+
+        // we check if current location matches any of its children
+        const matchesCurrentRoute = children.some(
+          (child) =>
+            location.pathname === child.path ||
+            location.pathname.startsWith(child.path + "/"),
+        );
+
+        if (!matchesCurrentRoute && newSet.has(expandedId)) {
+          // Only close if this doesn't match current route
+          const parentId = itemHierarchy.get(expandedId);
+          const siblings = Array.from(newSet).filter(
+            (id) => itemHierarchy.get(id) === parentId && id !== expandedId,
+          );
+
+          siblings.forEach((sibling) => {
+            const siblingChildren =
+              findItemById(menuItems, sibling)?.children || [];
+            const siblingHasActive = siblingChildren.some((child) =>
+              isActive(child.path),
+            );
+            if (!siblingHasActive) {
+              newSet.delete(sibling);
+            }
+          });
+        }
+      });
+      return newSet;
+    });
+  }, [location.pathname]);
+
+  const findItemById = (
+    items: MenuItem[],
+    id: string,
+  ): MenuItem | undefined => {
+    for (const item of items) {
+      if (item.id === id) return item;
+      if (item.children) {
+        const found = findItemById(item.children, id);
+        if (found) return found;
+      }
+    }
+    return undefined;
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -84,12 +168,48 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed = false, onToggle }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const buildItemHierarchy = (
+    items: MenuItem[],
+    parentId: string | null = null,
+  ): Map<string, string | null> => {
+    const map = new Map<string, string | null>();
+    items.forEach((item) => {
+      map.set(item.id, parentId);
+      if (item.children) {
+        item.children.forEach((child) => {
+          map.set(child.id, item.id);
+        });
+        buildItemHierarchy(item.children, item.id).forEach((value, key) => {
+          if (!map.has(key)) {
+            map.set(key, value);
+          }
+        });
+      }
+    });
+    return map;
+  };
+
+  const itemHierarchy = buildItemHierarchy(menuItems);
+
   const toggleExpand = (itemId: string) => {
-    setExpandedItems((prev) =>
-      prev.includes(itemId)
-        ? prev.filter((id) => id !== itemId)
-        : [...prev, itemId],
-    );
+    setExpandedItems((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else {
+        const parentId = itemHierarchy.get(itemId);
+        Array.from(newSet).forEach((expandedId) => {
+          if (
+            itemHierarchy.get(expandedId) === parentId &&
+            expandedId !== itemId
+          ) {
+            newSet.delete(expandedId);
+          }
+        });
+        newSet.add(itemId);
+      }
+      return newSet;
+    });
   };
 
   const isActive = (path?: string) => {
@@ -100,7 +220,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed = false, onToggle }) => {
   };
 
   const getUserInitials = () => {
-    return dummyUser.name
+    return user?.full_name
       .split(" ")
       .map((n) => n[0])
       .join("")
@@ -113,17 +233,21 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed = false, onToggle }) => {
     onToggle?.();
   };
 
+  if (!isMounted) {
+    return null;
+  }
+
   return (
     <motion.div
       layout
       layoutRoot
-      initial={{ width: isCollapsed ? 80 : 280 }}
+      initial={false}
       animate={{ width: isCollapsed ? 80 : 280 }}
       transition={{
         type: "spring",
-        damping: 25,
-        stiffness: 200,
-        layout: { duration: 0.2 },
+        damping: 20,
+        stiffness: 150,
+        mass: 1.2,
       }}
       className="h-screen bg-black border-r border-white/10 flex flex-col relative overflow-hidden"
     >
@@ -184,6 +308,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed = false, onToggle }) => {
               expandedItems={expandedItems}
               toggleExpand={toggleExpand}
               isActive={isActive}
+              level={0}
             />
           ))}
         </Reorder.Group>
@@ -203,10 +328,10 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed = false, onToggle }) => {
             className="relative shrink-0"
           >
             <div className="w-10 h-10 rounded-full bg-linear-to-br from-blue-500/20 to-purple-500/20 border border-white/30 flex items-center justify-center">
-              {dummyUser.avatar ? (
+              {user?.avatar ? (
                 <img
-                  src={dummyUser.avatar}
-                  alt={dummyUser.name}
+                  src={user?.avatar}
+                  alt={user.full_name}
                   className="w-full h-full rounded-full object-cover"
                 />
               ) : (
@@ -230,7 +355,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed = false, onToggle }) => {
               >
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-white truncate">
-                    {dummyUser.name}
+                    {user?.full_name}
                   </p>
                   <motion.button
                     whileHover={{ scale: 1.1 }}
@@ -268,10 +393,10 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed = false, onToggle }) => {
               <div className="p-4 bg-white/5 border-b border-white/10">
                 <div className="flex items-center space-x-3">
                   <div className="w-12 h-12 rounded-full bg-linear-to-br from-blue-500/20 to-purple-500/20 border border-white/30 flex items-center justify-center">
-                    {dummyUser.avatar ? (
+                    {user?.avatar ? (
                       <img
-                        src={dummyUser.avatar}
-                        alt={dummyUser.name}
+                        src={user?.avatar}
+                        alt={user.full_name}
                         className="w-full h-full rounded-full object-cover"
                       />
                     ) : (
@@ -282,11 +407,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed = false, onToggle }) => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-white truncate">
-                      {dummyUser.name}
+                      {user?.full_name}
                     </p>
                     <div className="flex items-center space-x-1 mt-1">
                       <span className="px-2 py-0.5 text-[10px] font-medium bg-white/10 text-white/80 rounded-full">
-                        {dummyUser.role}
+                        {user?.role}
                       </span>
                     </div>
                   </div>
@@ -297,20 +422,20 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed = false, onToggle }) => {
                 <div className="flex items-center space-x-2 px-2 py-1.5">
                   <Mail className="h-3.5 w-3.5 text-white/40" />
                   <p className="text-xs text-white/80 truncate">
-                    {dummyUser.email}
+                    {user?.email}
                   </p>
                 </div>
                 <div className="flex items-center space-x-2 px-2 py-1.5">
                   <IdCard className="h-3.5 w-3.5 text-white/40" />
                   <p className="text-xs text-white/60 font-mono">
-                    {dummyUser.staffId}
+                    {user?.staff_id}
                   </p>
                 </div>
               </div>
 
               <div className="p-2 border-t border-white/10 bg-white/5">
                 <button
-                  onClick={() => console.log("Profile settings")}
+                  onClick={() => navigate("/profile/#/~/@me")}
                   className="w-full flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors"
                 >
                   <User className="h-4 w-4 text-white/60" />
@@ -334,14 +459,26 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed = false, onToggle }) => {
   );
 };
 
-const MenuItemComponent: React.FC<{
+interface MenuItemComponentProps {
   item: MenuItem;
   isCollapsed: boolean;
-  expandedItems: string[];
+  expandedItems: Set<string>;
   toggleExpand: (id: string) => void;
   isActive: (path?: string) => boolean;
-}> = ({ item, isCollapsed, expandedItems, toggleExpand, isActive }) => {
+  level: number;
+}
+
+const MenuItemComponent: React.FC<MenuItemComponentProps> = ({
+  item,
+  isCollapsed,
+  expandedItems,
+  toggleExpand,
+  isActive,
+  level,
+}) => {
   const dragControls = useDragControls();
+  const hasChildren = item.children && item.children.length > 0;
+  const isExpanded = expandedItems.has(item.id);
 
   return (
     <Reorder.Item
@@ -351,23 +488,25 @@ const MenuItemComponent: React.FC<{
       className="relative"
     >
       <div className="relative">
-        <motion.div
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          className="absolute -left-2 top-1/2 transform -translate-y-1/2 cursor-grab active:cursor-grabbing"
-          onPointerDown={(e) => dragControls.start(e)}
-        >
-          <GripVertical className="h-4 w-4 text-white/40 hover:text-white/60" />
-        </motion.div>
+        {level === 0 && (
+          <motion.div
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className="absolute -left-2 top-1/2 transform -translate-y-1/2 cursor-grab active:cursor-grabbing"
+            onPointerDown={(e) => dragControls.start(e)}
+          >
+            <GripVertical className="h-4 w-4 text-white/40 hover:text-white/60" />
+          </motion.div>
+        )}
 
-        {!item.children ? (
+        {!hasChildren ? (
           <Link
             to={item.path || "#"}
             className={`
-              flex items-center space-x-3 px-4 py-3 rounded-lg transition-all
+              flex items-center space-x-2 px-3 py-1.5 rounded-lg transition-all
               ${
                 isActive(item.path)
-                  ? "bg-white/10 text-white border-l-2 border-white"
+                  ? "bg-white/10 text-white"
                   : "text-white/60 hover:text-white hover:bg-white/5"
               }
               ${isCollapsed ? "justify-center" : ""}
@@ -381,7 +520,7 @@ const MenuItemComponent: React.FC<{
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.15 }}
-                  className="flex-1 text-sm font-medium whitespace-nowrap"
+                  className={`flex-1 font-medium whitespace-nowrap ${level === 0 ? "text-sm" : "text-xs"}`}
                 >
                   {item.label}
                 </motion.span>
@@ -393,9 +532,9 @@ const MenuItemComponent: React.FC<{
             <button
               onClick={() => toggleExpand(item.id)}
               className={`
-                w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all
+                w-full flex items-center space-x-2 px-3 py-1.5 rounded-lg transition-all
                 ${
-                  expandedItems.includes(item.id)
+                  isExpanded
                     ? "bg-white/5 text-white"
                     : "text-white/60 hover:text-white hover:bg-white/5"
                 }
@@ -416,12 +555,16 @@ const MenuItemComponent: React.FC<{
                       {item.label}
                     </motion.span>
                     <motion.div
-                      initial={{ opacity: 0, rotate: -90 }}
+                      initial={false}
                       animate={{
-                        opacity: 1,
-                        rotate: expandedItems.includes(item.id) ? 90 : 0,
+                        rotate: isExpanded ? 90 : 0,
                       }}
-                      transition={{ duration: 0.2 }}
+                      transition={{
+                        duration: 0.2,
+                        type: "spring",
+                        damping: 20,
+                        stiffness: 200,
+                      }}
                     >
                       <ChevronRight className="h-4 w-4" />
                     </motion.div>
@@ -431,36 +574,32 @@ const MenuItemComponent: React.FC<{
             </button>
 
             <AnimatePresence initial={false}>
-              {!isCollapsed && expandedItems.includes(item.id) && (
+              {!isCollapsed && isExpanded && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{
                     duration: 0.2,
-                    height: { type: "spring", damping: 20, stiffness: 200 },
+                    height: { type: "spring", damping: 25, stiffness: 200 },
                   }}
-                  className="ml-8 mt-1 space-y-1 overflow-hidden"
+                  className="overflow-hidden"
                 >
-                  {item.children?.map((child) => (
-                    <Link
-                      key={child.id}
-                      to={child.path || "#"}
-                      className={`
-                        flex items-center space-x-3 px-4 py-2 rounded-lg transition-all
-                        ${
-                          isActive(child.path)
-                            ? "bg-white/10 text-white"
-                            : "text-white/60 hover:text-white hover:bg-white/5"
-                        }
-                      `}
-                    >
-                      <span className="shrink-0">{child.icon}</span>
-                      <span className="flex-1 text-xs font-medium whitespace-nowrap">
-                        {child.label}
-                      </span>
-                    </Link>
-                  ))}
+                  <div
+                    className={`mt-0.5 space-y-px ${level === 0 ? "ml-6" : "ml-2"}`}
+                  >
+                    {item.children?.map((child) => (
+                      <MenuItemComponent
+                        key={child.id}
+                        item={child}
+                        isCollapsed={isCollapsed}
+                        expandedItems={expandedItems}
+                        toggleExpand={toggleExpand}
+                        isActive={isActive}
+                        level={level + 1}
+                      />
+                    ))}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>

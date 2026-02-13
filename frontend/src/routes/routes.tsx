@@ -7,6 +7,11 @@ import AddEmployee from "../pages/employees/AddEmployee";
 import App from "../App";
 import AuditLogspage from "../pages/audit/AuditLogs";
 import AuditDetailPage from "../pages/audit/AuditDetailPage";
+import Divisions from "../pages/setup/division/Divisions";
+import Stations from "../pages/setup/station/Stations";
+import AddEditDivision from "../pages/setup/division/AddEditDivision";
+import AddEditStation from "../pages/setup/station/AddEditStation";
+import Profile from "../pages/profile/Profile";
 
 export const router = createBrowserRouter([
   {
@@ -32,6 +37,10 @@ export const router = createBrowserRouter([
             <Link to={"/cu/employees/list"}>a</Link>
           </div>
         ),
+      },
+      {
+        path: "profile",
+        element: <Profile />,
       },
       {
         path: "cu",
@@ -60,6 +69,35 @@ export const router = createBrowserRouter([
                     element: <AuditDetailPage />,
                   },
                 ],
+              },
+            ],
+          },
+          {
+            path: "setup",
+            children: [
+              {
+                path: "divisions",
+                element: <Divisions />,
+              },
+              {
+                path: "divisions/new",
+                element: <AddEditDivision />,
+              },
+              {
+                path: "divisions/edit/:id",
+                element: <AddEditDivision />,
+              },
+              {
+                path: "stations",
+                element: <Stations />,
+              },
+              {
+                path: "stations/new",
+                element: <AddEditStation />,
+              },
+              {
+                path: "stations/edit/:id",
+                element: <AddEditStation />,
               },
             ],
           },

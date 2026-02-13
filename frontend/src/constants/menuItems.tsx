@@ -15,6 +15,8 @@ import {
   UserCog,
   FileSpreadsheet,
   PieChart,
+  House,
+  Plus,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -81,12 +83,6 @@ export const SidebarMenuItems: MenuItem[] = [
         icon: <Download className="h-4 w-4" />,
         path: "/cu/employees/export",
       },
-      {
-        id: "emp-roles",
-        label: "Manage Roles",
-        icon: <UserCog className="h-4 w-4" />,
-        path: "/employees/roles",
-      },
     ],
   },
   {
@@ -96,16 +92,59 @@ export const SidebarMenuItems: MenuItem[] = [
     path: "/performance",
   },
   {
-    id: "attendance",
-    label: "Attendance",
+    id: "management",
+    label: "Management",
     icon: <Calendar className="h-5 w-5" />,
-    path: "/attendance",
+    children: [
+      // {
+      //   id: ""
+      // }
+    ],
   },
   {
-    id: "recognition",
-    label: "Recognition",
+    id: "setup",
+    label: "Setup",
     icon: <Award className="h-5 w-5" />,
-    path: "/recognition",
+    children: [
+      {
+        id: "division",
+        label: "Division",
+        icon: <Award className="h-5 w-5" />,
+        children: [
+          {
+            id: "division-list",
+            label: "Division List",
+            icon: <House />,
+            path: "/cu/setup/divisions",
+          },
+          {
+            id: "add-division",
+            label: "Add Division",
+            icon: <Plus />,
+            path: "/cu/setup/divisions/new",
+          },
+        ],
+      },
+      {
+        id: "station",
+        label: "Sttation",
+        icon: <Award className="h-5 w-5" />,
+        children: [
+          {
+            id: "station-list",
+            label: "Station List",
+            icon: <House />,
+            path: "/cu/setup/stations",
+          },
+          {
+            id: "add-station",
+            label: "Add Station",
+            icon: <Plus />,
+            path: "/cu/setup/stations/new",
+          },
+        ],
+      },
+    ],
   },
   {
     id: "settings",
