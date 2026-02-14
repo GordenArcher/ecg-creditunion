@@ -293,4 +293,4 @@ Common issues:
 For support, security concerns, or questions:
 
 * Open an issue in the repository
-* Email: **[your-email@example.com](mailto:your-email@example.com)**
+* Email: **[archergorden@gmail.com](mailto:archergorden@gmail.com)**
