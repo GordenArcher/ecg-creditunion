@@ -10,6 +10,7 @@ router.register(r"stations", StationViewSet, basename="station")
 
 urlpatterns = [
     path('auth/login/', auth.login_user),
+    path("auth/staff/login/", auth.staff_login),
     path('auth/logout/', auth.logout_user),
     path('auth/refresh/', auth.refresh_token),
     path('auth/is_authenticated/', auth.check_auth),
@@ -17,6 +18,7 @@ urlpatterns = [
     path('profile/', profile.get_own_profile),
     path('profile/update/', profile.update_own_profile),
     path('profile/change-password/', profile.change_password),
+    path("profile/staff/setup-password/", profile.first_time_password_change),
 
     path('admin/employees/', admin.list_all_users),
     path('admin/users/create/', admin.create_staff_user),

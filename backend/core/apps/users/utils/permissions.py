@@ -7,9 +7,9 @@ class PermissionHelper:
     # Field permissions by context and role
     FIELD_PERMISSIONS = {
         'self_update': {
-            'SUPER_ADMIN': {'full_name', 'phone_number', 'role', 'station', 'division', 'title', 'date_of_birth', 'number_of_dependents', 'is_active'},
-            'ADMIN': {'full_name', 'phone_number', 'role', 'station', 'division', 'title', 'date_of_birth', 'number_of_dependents', 'is_active'},
-            'STAFF': {'full_name', 'title', 'email', 'phone_number', 'avatar', 'date_of_birth'},
+            'SUPER_ADMIN': {'full_name', 'title', 'email', "marital_status", "number_of_dependents",'phone_number', "gender", 'avatar', 'date_of_birth', 'is_active'},
+            'ADMIN': {'full_name', 'title', 'email', "marital_status", "number_of_dependents",'phone_number', "gender", 'avatar', 'date_of_birth','is_active'},
+            'STAFF': {'full_name', 'title', 'email', "marital_status", "number_of_dependents",'phone_number', "gender", 'avatar', 'date_of_birth'},
         },
         'admin_update_staff': {
             'SUPER_ADMIN': {'full_name', 'phone_number', 'role', 'station', 'division', 'title', 'date_of_birth', 'number_of_dependents', 'is_active'},

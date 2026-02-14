@@ -506,12 +506,26 @@ class UserAccountMeta(models.Model):
         default=False,
         help_text=_("Whether two-factor authentication is enabled")
     )
+
+    two_factor_method = models.CharField(
+        _("Two-Factor Method"),
+        max_length=50,
+        blank=True,
+        help_text=_("Method used for two-factor authentication (e.g., SMS, Email)"),
+        choices=[('SMS', 'SMS'), ('EMAIL', 'Email')]
+    )
     
     last_password_change = models.DateTimeField(
         _("Last Password Change"),
         null=True,
         blank=True,
         help_text=_("Timestamp of last password change")
+    )
+
+    is_first_login = models.BooleanField(
+        _("Is First Login"),
+        default=True,
+        help_text=_("Whether this is the user's first login")
     )
     
     created_at = models.DateTimeField(auto_now_add=True)

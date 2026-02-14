@@ -14,7 +14,7 @@ class UserValidationHelper:
         """Get validation rules for update context."""
         rules = {
             'self_update': {
-                'email': {'required': False, 'editable': False},
+                'email': {'required': False, 'editable': True},
                 'role': {'required': False, 'editable': False},
                 'staff_id': {'required': False, 'editable': False},
                 'is_active': {'required': False, 'editable': False},

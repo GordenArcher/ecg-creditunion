@@ -65,12 +65,12 @@ class CustomUserAdmin(BaseUserAdmin):
 @admin.register(UserAccountMeta)
 class UserAccountMetaAdmin(admin.ModelAdmin):
     list_display = (
-        'user', 'email_verified', 'phone_verified', 'failed_login_attempts', 'is_account_locked'
+        'user', 'is_first_login', 'email_verified', 'phone_verified', 'failed_login_attempts', 'is_account_locked'
     )
     search_fields = ('user__staff_id', 'user__full_name', 'user__email')
-    list_filter = ('email_verified', 'phone_verified')
+    list_filter = ('email_verified', 'phone_verified', 'is_first_login')
     readonly_fields = (
-        'user', 'email_verified', 'email_verified_at',
+        'user', 'is_first_login', 'email_verified', 'email_verified_at',
         'phone_verified', 'phone_verified_at',
         'last_email_verification_sent', 'last_phone_verification_sent',
         'failed_login_attempts', 'last_failed_login',

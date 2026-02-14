@@ -1,6 +1,6 @@
 import logging
 from django.conf import settings
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, login
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.utils import timezone
@@ -26,8 +26,6 @@ from ..utils.user_cache import UserCacheManager
 from rest_framework.pagination import PageNumberPagination
 from django.db.models import Q
 logger = logging.getLogger(__name__)
-
-
 
 
 
@@ -82,7 +80,7 @@ def login_user(request):
             )
             return error_response(
                 message="Invalid email or password.",
-                status_code=status.HTTP_401_UNAUTHORIZED,
+                status=status.HTTP_400_BAD_REQUEST,
                 code="INVALID_CREDENTIALS",
                 request_id=request_id,
             )
@@ -110,7 +108,7 @@ def login_user(request):
             )
             return error_response(
                 message="Invalid email or password.",
-                status_code=status.HTTP_401_UNAUTHORIZED,
+                status=status.HTTP_400_BAD_REQUEST,
                 code="INVALID_CREDENTIALS",
                 request_id=request_id,
             )
@@ -187,6 +185,8 @@ def login_user(request):
                 "login_method": "staff_id_password",
             }
         )
+
+        login(request, user)
         
         return set_auth_cookies(response, user, tokens, request)
         
@@ -202,6 +202,135 @@ def login_user(request):
 
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
+def staff_login(request):
+    """
+    Staff login using staff ID and password.
+    Expected Request Body:
+        {
+            "staff_id": "123456",
+            "password": "password123"
+        }
+    Returns:
+        Success: User data with tokens
+        Error: Appropriate error message
+    """
+
+    request_id = generate_request_id()
+
+    try:
+        data = request.data
+        staff_id = data.get("staff_id")
+        password = data.get("password")
+
+        if not staff_id or not password:
+            return error_response(
+                message="Staff ID and password are required.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                code="MISSING_CREDENTIALS",
+                request_id=request_id,
+            )
+        
+        try:
+            user = User.objects.get(staff_id=staff_id)
+        except User.DoesNotExist:
+            return error_response(
+                message="Invalid staff ID or password.",
+                code="INVALID_CREDENTIALS",
+                request_id=request_id,
+            )
+        
+        if not user.check_password(password):
+            AuditService.log(
+                actor=None,
+                action="STAFF_LOGIN_FAILED",
+                target_type="User",
+                target_id=str(user.employee_id or user.staff_id),
+                severity=AuditLog.Severity.MEDIUM,
+                status=AuditLog.Status.FAILED,
+                ip_address=get_client_ip(request),
+                metadata={
+                    "staff Id": staff_id,
+                    "Email Tried": user.email,
+                    "reason": "Incorrect password",
+                    "login method": "staff_login_endpoint",
+                },
+                device_info=request.META.get('HTTP_USER_AGENT', ''),
+            )
+
+            return error_response(
+                message="Invalid staff ID or password.",
+                code="INVALID_CREDENTIALS",
+                request_id=request_id,
+            )
+        
+        if not user.is_active:
+            return error_response(
+                message="Account is inactive. Please contact administrator.",
+                status_code=status.HTTP_403_FORBIDDEN,
+                code="ACCOUNT_INACTIVE",
+                request_id=request_id,
+            )
+        if user.discontinued:
+            return error_response(
+                message="Account has been discontinued. Please contact support for assistance.",
+                errors={"next_steps": ["Contact support to reactivate or resolve account issues."]},
+                status_code=status.HTTP_403_FORBIDDEN,
+                code="ACCOUNT_DISCONTINUED",
+                request_id=request_id,
+            )
+
+        login(request, user)
+        
+        serializer = UserSerializer(user)
+
+        AuditService.log(
+            actor=user,
+            action="STAFF_LOGIN",
+            target_type="User",
+            target_id=str(user.id),
+            severity=AuditLog.Severity.MEDIUM,
+            status=AuditLog.Status.SUCCESS,
+            ip_address=get_client_ip(request),
+            metadata={
+                "staff_id": user.staff_id,
+                "login_method": "staff_login_endpoint",
+            },
+            device_info=request.META.get('HTTP_USER_AGENT', ''),
+            actor_role=user.role if hasattr(user, 'role') else None,
+        )
+
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+
+        return success_response(
+            message="Login successful.",
+            data={
+                "tokens": {
+                    "access_token": access_token,
+                    "refresh_token": str(refresh),
+                },
+                "user": serializer.data,
+                "change_password_required": user.account_meta.is_first_login,
+            },
+            status_code=status.HTTP_200_OK,
+            code="STAFF_LOGIN_SUCCESS",
+            request_id=request_id,
+        )
+
+    except Exception as e:
+        logger.error(f"Error during staff login: {str(e)}", exc_info=True)
+        return error_response(
+            message="An internal error occurred.",
+            errors=str(e) if settings.DEBUG else None,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            code="INTERNAL_SERVER_ERROR",
+            request_id=request_id,
+        )
+
+
+
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def logout_user(request):
     """
@@ -214,7 +343,7 @@ def logout_user(request):
     """
     request_id = generate_request_id()
 
-    refresh_token = request.COOKIES.get("tkn.sidcc")
+    refresh_token = request.COOKIES.get("tkn.sidcc") or request.data.get("refresh_token")
 
     try:
 
@@ -280,6 +409,7 @@ def refresh_token(request):
     request_id = generate_request_id()
     
     try:
+        refresh_token = request.data.get("refresh_token") or request.COOKIES.get("tkn.sidcc")
         if not refresh_token:
             return error_response(
                 message="Refresh token is required.",
@@ -288,12 +418,9 @@ def refresh_token(request):
                 request_id=request_id,
             )
         
-        # Create new access token from refresh token
+        
         refresh = RefreshToken(refresh_token)
         
-        # Get user from token
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
         
         try:
             user_id = refresh.get('user_id')
@@ -306,7 +433,7 @@ def refresh_token(request):
                 request_id=request_id,
             )
         
-        # Check if user is active
+        # we check if user is active or discontinued before issuing new token
         if not user.is_active or user.discontinued:
             return error_response(
                 message="Account is inactive or discontinued.",
@@ -315,15 +442,12 @@ def refresh_token(request):
                 request_id=request_id,
             )
         
-        # Generate new access token
         new_access_token = str(refresh.access_token)
         
-        # Get token expiration
         access_lifetime = api_settings.ACCESS_TOKEN_LIFETIME
         
-        # Create response
         response_data = {
-            "access": new_access_token,
+            "access_token": new_access_token,
             "access_expires": (timezone.now() + access_lifetime).isoformat(),
         }
         
@@ -333,19 +457,6 @@ def refresh_token(request):
             status_code=status.HTTP_200_OK,
             code="TOKEN_REFRESHED",
             request_id=request_id,
-        )
-        
-        
-        # Log token refresh (LOW severity)
-        AuditService.log(
-            actor=user,
-            action="TOKEN_REFRESH",
-            target_type="User",
-            target_id=str(user.id),
-            severity=AuditLog.Severity.LOW,
-            status=AuditLog.Status.SUCCESS,
-            ip_address=get_client_ip(request),
-            metadata={"token_type": "access_token"}
         )
         
         return response
